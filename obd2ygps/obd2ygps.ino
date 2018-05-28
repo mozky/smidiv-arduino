@@ -1,12 +1,4 @@
-/*************************************************************************
-* Testing sketch for Freematics OBD-II UART Adapter V1/V2/V2.1
-* Performs AT command-set test
-* Reads and prints several OBD-II PIDs value
-* Reads and prints motion sensor data if available
-* Distributed under BSD
-* Visit https://freematics.com/products for more product information
-* Written by Stanley Huang <stanley@freematics.com.au>
-*************************************************************************/
+
 #define BEARER_PROFILE_GPRS "AT+SAPBR=3,1,\"Contype\",\"GPRS\"\r\n"
 #define BEARER_PROFILE_APN "AT+SAPBR=3,1,\"APN\",\"%s\"\r\n"
 #define QUERY_BEARER "AT+SAPBR=2,1\r\n"
@@ -80,7 +72,7 @@ enum Result {
 
 #if defined(ESP32) && !defined(Serial1)
 HardwareSerial Serial1(1);
-HardwareSerial Serial2(1);
+//HardwareSerial mySerial(1);
 #endif
 #include <SoftwareSerial.h>
 SoftwareSerial mySerial(11, 10);
@@ -88,6 +80,68 @@ COBD obd;
 bool hasMEMS;
 String state, timegps, latitude, longitude, internetState;
 #define DEBUG true 
+void print(const __FlashStringHelper *message, int code = -1){
+  if (code != -1){
+    Serial.print(message);
+    Serial.println(code);
+  }
+  else {
+    Serial.println(message);
+  }
+}
+
+void mandarequest(){
+  
+  char response[90];
+  char body[90];
+  char otro[10];
+  char otro1[10];
+  char SMIDIVID[10] = "ABD10";
+  Result result;
+  Serial.print("hola");
+  configureBearer("web.iusacellgsm.mx");
+  //print(F("Cofigure bearer: "), configureBearer("web.iusacellgsm.mx"));
+  
+  print(F("intentando el connect"));
+  result = connect();
+  print(F("HTTP connect: "), result);
+  mySerial.print("A latitud"+latitude);
+  mySerial.print("A longuitud"+longitude);
+  latitude.toCharArray(otro,10);
+  longitude.toCharArray(otro1,10);
+  mySerial.print("cosa");
+  mySerial.print(otro);
+  mySerial.print(otro1);
+  
+  sprintf(body, "{\r\n  \"smidivID\": \"%s\",\r\n  \"ubicacion\": {\r\n    \"lat\": %s,\r\n    \"lon\": %s\r\n  }}",SMIDIVID,otro,otro1);
+  result = post("ee997bd2.ngrok.io/ubicacion", body, response);
+  print(F("HTTP POST: "), result);
+  if (result == SUCCESS) {
+    mySerial.println(response);
+    StaticJsonBuffer<32> jsonBuffer;
+    JsonObject& root = jsonBuffer.parseObject(response);
+    lastRunTime = millis();
+    waitForRunTime = root["waitForRunTime"];
+    
+    print(F("Last run time: "), lastRunTime);
+    print(F("Next post in: "), waitForRunTime);
+  }
+}
+
+
+void loop()
+{
+  getGPS();
+  mandarequest();
+  //readPIDSingle();
+  //readPIDMultiple();
+  
+  //readBatteryVoltage();
+ /* if (hasMEMS) {
+    readMEMS();
+  }*/
+}
+
 void testATcommands()
 {
     static const char cmds[][6] = {"ATZ\r", "ATI\r", "ATH0\r", "ATRV\r", "0100\r", "010C\r", "0902\r"};
@@ -163,33 +217,6 @@ void readBatteryVoltage()
   mySerial1.print(obd.getVoltage(), 1);
   mySerial1.println('V');
 }
-
-Result post(const char *uri, const char *body, char *response) {
-
-  Result result = setHTTPSession(uri);
-
-  char httpData[32];
-  unsigned int delayToDownload = 10000;
-  sprintf(httpData, HTTP_DATA, strlen(body), 10000);
-  if (sendCmdAndWaitForResp(httpData, DOWNLOAD, 2000) == FALSE){
-    result = ERROR_HTTP_DATA;
-  }
-
-  purgeSerial();
-  delay(500);
-  Serial2.println(body);
-
-  if (sendCmdAndWaitForResp(HTTP_POST, HTTP_2XX, delayToDownload) == TRUE) {
-    Serial2.println(HTTP_READ);
-    readResponse(response);
-    result = SUCCESS;
-  }
-  else {
-    result = ERROR_HTTP_POST;
-  }
-
-  return result;
-}
 void readMEMS()
 {
   int16_t acc[3] = {0};
@@ -228,6 +255,81 @@ void readMEMS()
   mySerial1.print((float)temp / 10, 1);
   mySerial1.println("C");
 }
+
+
+String sendData(String command, const int timeout, boolean debug) {
+  
+    String response = "";    
+    mySerial.println(command); 
+    long int time = millis();
+    int i = 0;  
+     
+    while( (time+timeout) > millis()){
+      while(mySerial.available()){       
+        char c = mySerial.read();
+        response+=c;
+      }  
+    }    
+    if(debug){
+      Serial.print(response);
+    }    
+    return response;
+}
+
+void sendTabData(String command, const int timeout, boolean debug) {
+  String latlongtab[5];  // for the purpose of example let array be global
+ 
+    mySerial.println(command); 
+    long int time = millis();
+    int i = 0;   
+    
+    while((time+timeout) > millis()){
+      while(mySerial.available()){       
+        char c = mySerial.read();
+        if(c != ','){ //read characters until you find comma, if found increment
+          latlongtab[i]+=c;
+          delay(100);
+        }else{
+          i++;        
+        }
+        if(i == 5){
+          delay(100);
+          goto exitL;
+        }       
+      }    
+    }exitL:    
+    if(debug){ 
+      /*or you just can return whole table,in case if its not global*/ 
+      state = latlongtab[1];     //state = recieving data - 1, not recieving - 0
+      timegps = latlongtab[2];
+      latitude = latlongtab[3]; //latitude
+      longitude = latlongtab[4]; //longitude
+    }    
+}
+
+void getGPS()
+{
+  sendTabData("AT+CGNSINF",1000,DEBUG);    //send demand of gps localization & GPRS connection (no funciona todavía)
+   if(state != 0&&latitude!=""){
+    /*we just dont want to print empty signs so we wait until 
+     * gps module will have connection to satelite.
+    
+     * when whole table returned:
+     * */
+     /*
+   for(int i = 0; i < (sizeof(latlongtab)/sizeof(int)); i++){
+      Serial.println(latlongtab[i]); // print 
+    }*//**/
+    Serial.println("Time: ");
+    Serial.println(timegps);
+    Serial.println("Latitude:");
+    Serial.println(latitude);
+    Serial.println(" Longitude ");
+    Serial.println(longitude);
+   }else{
+    Serial.println("GPS & Internet initializing");
+   }
+  }
 
 Result connect() {
 
@@ -280,24 +382,15 @@ Result configureBearer(const char *apn){
   return result;
 }
 
-String sendData(String command, const int timeout, boolean debug) {
-  
-    String response = "";    
-    Serial2.println(command); 
-    long int time = millis();
-    int i = 0;  
-     
-    while( (time+timeout) > millis()){
-      while(Serial2.available()){       
-        char c = Serial2.read();
-        response+=c;
-      }  
-    }    
-    if(debug){
-      Serial.print(response);
-    }    
-    return response;
+
+
+int sendCmdAndWaitForResp(const char* cmd, const char *resp, unsigned timeout)
+{
+    delay(1000);
+    mySerial.println(cmd);
+    return waitForResp(resp,timeout);
 }
+
 
 int waitForResp(const char *resp, unsigned int timeout)
 {
@@ -307,9 +400,9 @@ int waitForResp(const char *resp, unsigned int timeout)
     timerStart = millis();
 
     while(1) {
-        if(Serial2.available()) {
-            char c = Serial2.read();
-            if (debugMode) Serial2.print(c);
+        if(mySerial.available()) {
+            char c = mySerial.read();
+            if (debugMode) Serial.print(c);
             sum = (c == resp[sum] || resp[sum] == 'X') ? sum+1 : 0;
             if(sum == len)break;
         }
@@ -319,12 +412,14 @@ int waitForResp(const char *resp, unsigned int timeout)
         }
     }
 
-    while(Serial2.available()) {
-        Serial2.read();
+    while(mySerial.available()) {
+        mySerial.read();
     }
 
     return TRUE;
 }
+
+
 Result disconnect() {
 
   Result result = SUCCESS;
@@ -338,71 +433,50 @@ Result disconnect() {
 }
 void connectNetwork() {
   String response = "";    
-  Serial2.println("AT+SAPBR=2,1\r\n");
+  mySerial.println("AT+SAPBR=2,1\r\n");
   delay(1000);
-  Serial2.println("AT+SAPBR=1,1\r\n");
+  mySerial.println("AT+SAPBR=1,1\r\n");
   delay(1000);
-  Serial2.println("AT+HTTPINIT"); 
+  mySerial.println("AT+HTTPINIT"); 
   long int time = millis();
   int i = 0;  
    
   while( (time+1000) > millis()){
-    while(Serial2.available()){       
-      char c = Serial2.read();
+    while(mySerial.available()){       
+      char c = mySerial.read();
       response+=c;
     }  
   }
-  Serial2.print("Internet response: ");  
-  Serial2.print(response);
+  Serial.print("Internet response: ");  
+  Serial.print(response);
   internetState = response;
 }
-int sendCmdAndWaitForResp(const char* cmd, const char *resp, unsigned timeout)
-{
-    delay(1000);
-    Serial2.println(cmd);
-    return waitForResp(resp,timeout);
-}
-void sendTabData(String command, const int timeout, boolean debug) {
-  String latlongtab[5];  // for the purpose of example let array be global
- 
-    Serial2.println(command); 
-    long int time = millis();
-    int i = 0;   
-    
-    while((time+timeout) > millis()){
-      while(Serial2.available()){       
-        char c = Serial2.read();
-        if(c != ','){ //read characters until you find comma, if found increment
-          latlongtab[i]+=c;
-          delay(100);
-        }else{
-          i++;        
-        }
-        if(i == 5){
-          delay(100);
-          goto exitL;
-        }       
-      }    
-    }exitL:    
-    if(debug){ 
-      /*or you just can return whole table,in case if its not global*/ 
-      state = latlongtab[1];     //state = recieving data - 1, not recieving - 0
-      timegps = latlongtab[2];
-      latitude = latlongtab[3]; //latitude
-      longitude = latlongtab[4]; //longitude
-    }    
-}
-void print(const __FlashStringHelper *message, int code = -1){
-  if (code != -1){
-    Serial2.print(message);
-    Serial2.println(code);
+Result post(const char *uri, const char *body, char *response) {
+
+  Result result = setHTTPSession(uri);
+
+  char httpData[32];
+  unsigned int delayToDownload = 10000;
+  sprintf(httpData, HTTP_DATA, strlen(body), 10000);
+  if (sendCmdAndWaitForResp(httpData, DOWNLOAD, 2000) == FALSE){
+    result = ERROR_HTTP_DATA;
+  }
+
+  purgeSerial();
+  delay(500);
+  mySerial.println(body);
+
+  if (sendCmdAndWaitForResp(HTTP_POST, HTTP_2XX, delayToDownload) == TRUE) {
+    mySerial.println(HTTP_READ);
+    readResponse(response);
+    result = SUCCESS;
   }
   else {
-    Serial2.println(message);
+    result = ERROR_HTTP_POST;
   }
-}
 
-  
+  return result;
+}
 Result setHTTPSession(const char *uri){
 
   Result result;
@@ -426,35 +500,6 @@ Result setHTTPSession(const char *uri){
   return result;
 }
 
-void getGPS()
-{
-  sendTabData("AT+CGNSINF",1000,DEBUG);    //send demand of gps localization & GPRS connection (no funciona todavía)
-   if(state != 0&&latitude!=""){
-    /*we just dont want to print empty signs so we wait until 
-     * gps module will have connection to satelite.
-    
-     * when whole table returned:
-     * */
-     /*
-   for(int i = 0; i < (sizeof(latlongtab)/sizeof(int)); i++){
-      Serial.println(latlongtab[i]); // print 
-    }*//**/
-    Serial.println("Time: ");
-    Serial.println(timegps);
-    Serial.println("Latitude:");
-    Serial.println(latitude);
-    Serial.println(" Longitude ");
-    Serial.println(longitude);
-   }else{
-    Serial.println("GPS & Internet initializing");
-   }
-  }
-
-
-
-
-
-
 void readResponse(char *response){
 
   char buffer[128];
@@ -472,8 +517,8 @@ int readBuffer(char *buffer, int count, unsigned int timeOut)
     unsigned long timerStart,timerEnd;
     timerStart = millis();
     while(1) {
-        while (Serial2.available()) {
-            char c = Serial2.read();
+        while (mySerial.available()) {
+            char c = mySerial.read();
             buffer[i] = c;
             buffer[i + 1] = '\0';
             ++i;
@@ -486,8 +531,8 @@ int readBuffer(char *buffer, int count, unsigned int timeOut)
         }
     }
     delay(500);
-    while(Serial2.available()) {
-        Serial2.read();
+    while(mySerial.available()) {
+        mySerial.read();
     }
     return TRUE;
 }
@@ -499,12 +544,9 @@ void cleanBuffer(char *buffer, int count)
     }
 }
 
-
-
-
 void purgeSerial()
 {
-  while (Serial2.available()) Serial2.read();
+  while (mySerial.available()) mySerial.read();
 }
 void parseJSONResponse(const char *buffer, unsigned int bufferSize, char *response){
 
@@ -535,9 +577,11 @@ void parseJSONResponse(const char *buffer, unsigned int bufferSize, char *respon
 }
 void setup()
 {
-  Serial2.begin(9600);
+  
+  mySerial.begin(9600);
   Serial.begin(9600);
   mySerial1.begin(9600);
+  while(!mySerial);
   Serial.println("Enviando info");
   sendData("AT+CGNSPWR=1",1000,DEBUG);       //Initialize GPS device
   delay(50);
@@ -563,7 +607,7 @@ void setup()
   }
 
   // send some commands for testing and show response for debugging purpose
-  testATcommands();
+  //testATcommands();
 
   /*hasMEMS = obd.memsInit();
   mySerial1.print("MEMS:");
@@ -596,51 +640,5 @@ void setup()
     mySerial1.println();
   }
   delay(1000);
-}
-void mandarequest(){
-  
-  char response[90];
-  char body[90];
-  char otro[10];
-  char otro1[10];
-  char SMIDIVID[10] = "ABD10";
-  Result result;
-  print(F("Cofigure bearer: "), configureBearer("web.iusacellgsm.mx"));
-   print(F("intentando el connect"));
-  result = connect();
-  print(F("HTTP connect: "), result);
-  Serial2.print("A latitud"+latitude);
-  Serial2.print("A longuitud"+longitude);
-  latitude.toCharArray(otro,10);
-  longitude.toCharArray(otro1,10);
-  Serial2.print("cosa");
-  Serial2.print(otro);
-  Serial2.print(otro1);
-  
-  sprintf(body, "{\r\n  \"smidivID\": \"%s\",\r\n  \"ubicacion\": {\r\n    \"lat\": %s,\r\n    \"lon\": %s\r\n  }}",SMIDIVID,otro,otro1);
-  result = post("ee997bd2.ngrok.io/ubicacion", body, response);
-  print(F("HTTP POST: "), result);
-  if (result == SUCCESS) {
-    Serial2.println(response);
-    StaticJsonBuffer<32> jsonBuffer;
-    JsonObject& root = jsonBuffer.parseObject(response);
-    lastRunTime = millis();
-    waitForRunTime = root["waitForRunTime"];
-    
-    print(F("Last run time: "), lastRunTime);
-    print(F("Next post in: "), waitForRunTime);
-  }
-}
-
-void loop()
-{
-  getGPS();
-  //readPIDSingle();
-  //readPIDMultiple();
-  mandarequest();
-  //readBatteryVoltage();
- /* if (hasMEMS) {
-    readMEMS();
-  }*/
 }
 
