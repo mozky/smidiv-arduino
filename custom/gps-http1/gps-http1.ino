@@ -139,7 +139,7 @@ void mandarequest(){
   char body[90];
   char otro[10];
   char otro1[10];
-  char SMIDIVID[10] = "ABD10";
+  char SMIDIVID[10] = "PRSM123";
   Result result;
   print(F("Cofigure bearer: "), configureBearer("web.iusacellgsm.mx"));
    print(F("intentando el connect"));
@@ -154,7 +154,7 @@ void mandarequest(){
   Serial.print(otro1);
   
   sprintf(body, "{\r\n  \"smidivID\": \"%s\",\r\n  \"ubicacion\": {\r\n    \"lat\": %s,\r\n    \"lon\": %s\r\n  }}",SMIDIVID,otro,otro1);
-  result = post("ee997bd2.ngrok.io/ubicacion", body, response);
+  result = post("smidiv.javiersl.com:10010/ubicacion", body, response);
   print(F("HTTP POST: "), result);
   if (result == SUCCESS) {
     Serial.println(response);
