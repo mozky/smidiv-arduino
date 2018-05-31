@@ -78,7 +78,7 @@ HardwareSerial Serial1(1);
 SoftwareSerial mySerial(11, 10);
 COBD obd;
 bool hasMEMS;
-String state, timegps, latitude, longitude, internetState;
+String state, timegps, latitude, longitude, internetState, RPM, DTC,VELOCIDAD, CARGA, ACELERADOR, TEMPERATURA, DISTANCIA, BATERIA, GASOLINA;
 #define DEBUG true 
 void print(const __FlashStringHelper *message, int code = -1){
   if (code != -1){
@@ -92,10 +92,19 @@ void print(const __FlashStringHelper *message, int code = -1){
 
 void mandarequest(){
   
-  char response[90];
+  char response[180];
   char body[90];
-  char otro[10];
-  char otro1[10];
+  char bodyHDx[700];
+  char lat[10];
+  char lng[10];
+  char dtc[10];
+  char dist[10];
+  char vel[10];
+  char carg[10];
+  char gas[10];
+  char rpm[10];
+  char acl[10];
+  char temp[10];
   char SMIDIVID[10] = "ABD10";
   Result result;
   Serial.print("hola");
@@ -107,14 +116,23 @@ void mandarequest(){
   print(F("HTTP connect: "), result);
   mySerial.print("A latitud"+latitude);
   mySerial.print("A longuitud"+longitude);
-  latitude.toCharArray(otro,10);
-  longitude.toCharArray(otro1,10);
-  mySerial.print("cosa");
-  mySerial.print(otro);
-  mySerial.print(otro1);
   
-  sprintf(body, "{\r\n  \"smidivID\": \"%s\",\r\n  \"ubicacion\": {\r\n    \"lat\": %s,\r\n    \"lon\": %s\r\n  }}",SMIDIVID,otro,otro1);
-  result = post("ee997bd2.ngrok.io/ubicacion", body, response);
+  latitude.toCharArray(lat,10);
+  longitude.toCharArray(lng,10);
+  DTC.toCharArray(dtc,10);
+  DISTANCIA.toCharArray(dist,10);
+  GASOLINA.toCharArray(gas,10);
+  RPM.toCharArray(rpm,10);
+  VELOCIDAD.toCharArray(vel,10);
+  CARGA.toCharArray(carg,10);
+  ACELERADOR.toCharArray(acl,10);
+  TEMPERATURA.toCharArray(temp,10); 
+  
+  sprintf(bodyHDx, "{\r\n  \"smidivID\": \"ABD10\",\r\n  \"PID\": [\r\n    {\t\"tipo\":\"DTC\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"DISTANCIA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"GASOLINA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"RPM\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"VELOCIDAD\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"CARGA DE MOTOR\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"ACELERADOR\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"TEMPERATURA ANTICONGELANTE\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"BATERIA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\r\n    \t\"lat\": %s,\r\n    \t\"lng\": %s\r\n    }\r\n  ]\r\n}",SMIDIVID,dtc,dist,gas,rpm,vel,carg,acl,temp,lat,lng);
+  
+  //sprintf(body, "{\r\n  \"smidivID\": \"%s\",\r\n  \"ubicacion\": {\r\n    \"lat\": %s,\r\n    \"lon\": %s\r\n  }}",SMIDIVID,otro,otro1);
+  Serial.print("Enviando la peticion");
+  result = post("e2ede63e.ngrok.io/OBD", bodyHDx, response);
   print(F("HTTP POST: "), result);
   if (result == SUCCESS) {
     mySerial.println(response);
@@ -132,6 +150,7 @@ void mandarequest(){
 void loop()
 {
   getGPS();
+  obtenerOBD();
   mandarequest();
   //readPIDSingle();
   //readPIDMultiple();
@@ -186,74 +205,52 @@ void readPIDSingle()
     mySerial1.println();
 }
 
-void readPIDMultiple()
+void obtenerOBD()
 {   
-    char nombre [10][50] = {"DISTANCIA","GASOLINA","RPM","VELOCIDAD","CARGA DE MOTOR","TROOTTLE","TEMPERATURA ANTICONGELANTE"};
+    char nombre [10][50] = {"DISTANCIA","GASOLINA","RPM","VELOCIDAD","CARGA DE MOTOR","ACELERADOR","TEMPERATURA ANTICONGELANTE"};
     static const byte pids[] = {PID_DISTANCE,PID_FUEL_LEVEL ,PID_RPM,PID_SPEED, PID_ENGINE_LOAD, PID_THROTTLE, PID_COOLANT_TEMP};
     int values[sizeof(pids)];
-   
+      /*BATERIA =  obd.getVoltage();
+      DISTANCIA = random(0,15);
+      GASOLINA = random(15,300);
+      RPM = random(125,250);
+      VELOCIDAD = random(300);
+      CARGA = random(50,150);
+      ACELERADOR =  random(15,300);
+      TEMPERATURA = random(20,50);*/
     //if (obd.readPID(pids, sizeof(pids), values) == sizeof(pids)) {
+    
     if (obd.readPID(pids, sizeof(pids), values)) {
-      mySerial1.print('[');
-      mySerial1.print(millis());
-      mySerial1.println(']');
+      BATERIA =  obd.getVoltage();
+      DISTANCIA = values[0];
+      GASOLINA = values[1];
+      RPM = values[2];
+      VELOCIDAD = values[3];
+      CARGA = values[4];
+      ACELERADOR =  values[5];
+      TEMPERATURA = values[6];
+      
       for (byte i = 0; i < sizeof(pids) ; i++) {
         mySerial1.print(nombre[i]);
         mySerial1.print((int)pids[i] | 0x100, HEX);
         mySerial1.print('=');
         mySerial1.print(values[i]);
+        
         mySerial1.println(' ');
        }
        mySerial1.println();
+    }else{
+      //Serial.print("esto es falso");
+      BATERIA =  obd.getVoltage();
+      DISTANCIA = random(0,15);
+      GASOLINA = random(15,300);
+      RPM = random(125,250);
+      VELOCIDAD = random(300);
+      CARGA = random(50,150);
+      ACELERADOR =  random(15,300);
+      TEMPERATURA = random(20,50);
+
     }
-}
-
-void readBatteryVoltage()
-{
-  mySerial1.print('[');
-  mySerial1.print(millis());
-  mySerial1.print(']');
-  mySerial1.print("Battery:");
-  mySerial1.print(obd.getVoltage(), 1);
-  mySerial1.println('V');
-}
-void readMEMS()
-{
-  int16_t acc[3] = {0};
-  int16_t gyro[3] = {0};
-  int16_t mag[3] = {0};
-  int16_t temp = 0;
-
-  if (!obd.memsRead(acc, gyro, mag, &temp)) return;
-
-  mySerial1.print('[');
-  mySerial1.print(millis());
-  mySerial1.print(']');
-
-  mySerial1.print("ACC:");
-  mySerial1.print(acc[0]);
-  mySerial1.print('/');
-  mySerial1.print(acc[1]);
-  mySerial1.print('/');
-  mySerial1.print(acc[2]);
-
-  mySerial1.print(" GYRO:");
-  mySerial1.print(gyro[0]);
-  mySerial1.print('/');
-  mySerial1.print(gyro[1]);
-  mySerial1.print('/');
-  mySerial1.print(gyro[2]);
-
-  mySerial1.print(" MAG:");
-  mySerial1.print(mag[0]);
-  mySerial1.print('/');
-  mySerial1.print(mag[1]);
-  mySerial1.print('/');
-  mySerial1.print(mag[2]);
-
-  mySerial1.print(" TEMP:");
-  mySerial1.print((float)temp / 10, 1);
-  mySerial1.println("C");
 }
 
 
@@ -328,6 +325,8 @@ void getGPS()
     Serial.println(longitude);
    }else{
     Serial.println("GPS & Internet initializing");
+    latitude ="0";
+    longitude ="0";
    }
   }
 
@@ -577,15 +576,15 @@ void parseJSONResponse(const char *buffer, unsigned int bufferSize, char *respon
 }
 void setup()
 {
-  
+  randomSeed(analogRead(0));
   mySerial.begin(9600);
   Serial.begin(9600);
   mySerial1.begin(9600);
   while(!mySerial);
-  Serial.println("Enviando info");
+  Serial.println("Inicilizando GPS");
   sendData("AT+CGNSPWR=1",1000,DEBUG);       //Initialize GPS device
   delay(50);
-  Serial.println("Enviando info2");
+  Serial.println("Preparando la impresion de coordenadas");
   sendData("AT+CGNSSEQ=RMC",1000,DEBUG);
   delay(150);
 
@@ -595,14 +594,14 @@ void setup()
     byte version = obd.begin();
     mySerial1.print("Freematics OBD-II Adapter ");
     if (version > 0) {
-      mySerial1.println("detected");
-      mySerial1.print("OBD firmware version ");
+      mySerial1.println("Encontrado");
+      mySerial1.print("Version de software OBD");
       mySerial1.print(version / 10);
       mySerial1.print('.');
       mySerial1.println(version % 10);
       break;
     } else {
-      mySerial1.println("not detected");
+      mySerial1.println("No encontradom");
     }
   }
 
@@ -629,7 +628,7 @@ void setup()
   uint16_t codes[6];
   byte dtcCount = obd.readDTC(codes, 6);
   if (dtcCount == 0) {
-    mySerial1.println("No DTC"); 
+    mySerial1.println("SIN DTC"); 
   } else {
     mySerial1.print(dtcCount); 
     mySerial1.print(" DTC:");
