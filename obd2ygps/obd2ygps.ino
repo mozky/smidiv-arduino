@@ -105,6 +105,7 @@ void mandarequest(){
   char rpm[10];
   char acl[10];
   char temp[10];
+  char bat[10];
   char SMIDIVID[10] = "ABD10";
   Result result;
   Serial.print("hola");
@@ -120,19 +121,19 @@ void mandarequest(){
   latitude.toCharArray(lat,10);
   longitude.toCharArray(lng,10);
   DTC.toCharArray(dtc,10);
-  DISTANCIA.toCharArray(dist,10);
   GASOLINA.toCharArray(gas,10);
   RPM.toCharArray(rpm,10);
   VELOCIDAD.toCharArray(vel,10);
   CARGA.toCharArray(carg,10);
+  BATERIA.toCharArray(bat,10);
   ACELERADOR.toCharArray(acl,10);
   TEMPERATURA.toCharArray(temp,10); 
   
-  sprintf(bodyHDx, "{\r\n  \"smidivID\": \"ABD10\",\r\n  \"PID\": [\r\n    {\t\"tipo\":\"DTC\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"DISTANCIA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"GASOLINA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"RPM\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"VELOCIDAD\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"CARGA DE MOTOR\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"ACELERADOR\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"TEMPERATURA ANTICONGELANTE\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"BATERIA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\r\n    \t\"lat\": %s,\r\n    \t\"lng\": %s\r\n    }\r\n  ]\r\n}",SMIDIVID,dtc,dist,gas,rpm,vel,carg,acl,temp,lat,lng);
+  sprintf(bodyHDx, "{\r\n  \"smidivID\": \"ABD10\",\r\n  \"PID\": [\r\n    {\t\"tipo\":\"DTC\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"GASOLINA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"RPM\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"VELOCIDAD\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"CARGA DE MOTOR\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"ACELERADOR\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"TEMPERATURA ANTICONGELANTE\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\t\"tipo\":\"BATERIA\",\r\n    \t\"valor\":\"%s\"\r\n    },\r\n    {\r\n    \t\"lat\": %s,\r\n    \t\"lng\": %s\r\n    }\r\n  ]\r\n}",SMIDIVID,dtc,gas,rpm,vel,carg,acl,temp,bat,lat,lng);
   
   //sprintf(body, "{\r\n  \"smidivID\": \"%s\",\r\n  \"ubicacion\": {\r\n    \"lat\": %s,\r\n    \"lon\": %s\r\n  }}",SMIDIVID,otro,otro1);
   Serial.print("Enviando la peticion");
-  result = post("e2ede63e.ngrok.io/OBD", bodyHDx, response);
+  result = post("de8ff081.ngrok.io/OBD", bodyHDx, response);
   print(F("HTTP POST: "), result);
   if (result == SUCCESS) {
     mySerial.println(response);
@@ -207,8 +208,8 @@ void readPIDSingle()
 
 void obtenerOBD()
 {   
-    char nombre [10][50] = {"DISTANCIA","GASOLINA","RPM","VELOCIDAD","CARGA DE MOTOR","ACELERADOR","TEMPERATURA ANTICONGELANTE"};
-    static const byte pids[] = {PID_DISTANCE,PID_FUEL_LEVEL ,PID_RPM,PID_SPEED, PID_ENGINE_LOAD, PID_THROTTLE, PID_COOLANT_TEMP};
+    char nombre [10][50] = {"GASOLINA","RPM","VELOCIDAD","CARGA DE MOTOR","ACELERADOR","TEMPERATURA ANTICONGELANTE"};
+    static const byte pids[] = {PID_FUEL_LEVEL ,PID_RPM,PID_SPEED, PID_ENGINE_LOAD, PID_THROTTLE, PID_COOLANT_TEMP};
     int values[sizeof(pids)];
       /*BATERIA =  obd.getVoltage();
       DISTANCIA = random(0,15);
@@ -222,7 +223,6 @@ void obtenerOBD()
     
     if (obd.readPID(pids, sizeof(pids), values)) {
       BATERIA =  obd.getVoltage();
-      DISTANCIA = values[0];
       GASOLINA = values[1];
       RPM = values[2];
       VELOCIDAD = values[3];
@@ -240,15 +240,20 @@ void obtenerOBD()
        }
        mySerial1.println();
     }else{
-      //Serial.print("esto es falso");
+      Serial.print("esto es falso");
       BATERIA =  obd.getVoltage();
-      DISTANCIA = random(0,15);
+      RPM = "0";
+      VELOCIDAD = "0";
+      CARGA = "0";
+      ACELERADOR =  "0";
+      TEMPERATURA = "0";
+      /*DISTANCIA = random(0,15);
       GASOLINA = random(15,300);
       RPM = random(125,250);
       VELOCIDAD = random(300);
       CARGA = random(50,150);
       ACELERADOR =  random(15,300);
-      TEMPERATURA = random(20,50);
+      TEMPERATURA = random(20,50);*/
 
     }
 }
